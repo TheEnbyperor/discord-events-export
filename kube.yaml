@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discord-events-export
+  namespace: q-personal
+  labels:
+    app: discord-events-export
+    part: rocket
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discord-events-export
+      part: rocket
+  template:
+    metadata:
+      annotations:
+         cni.projectcalico.org/ipv6pools: "[\"default-ipv6-ippool\"]"
+      labels:
+        app: discord-events-export
+        part: rocket
+    spec:
+      volumes:
+        - name: config
+          secret:
+            secretName: discord-events-export-conf
+      containers:
+        - name: nginx
+          image: theenbyperor/discord-events-export:4
+          volumeMounts:
+            - name: config
+              mountPath: "/Rocket.toml"
+              subPath: "Rocket.toml"
+              readOnly: true
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discord-events-export
+  namespace: q-personal
+  labels:
+    app: discord-events-export
+    part: rocket
+spec:
+  selector:
+    app: discord-events-export
+    part: rocket
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: rocket
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: discord-events-export-ingress
+  namespace: q-personal
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  tls:
+    - hosts:
+        - discord-events.magicalcodewit.ch
+      secretName: discord-events-export-tls
+  rules:
+  - host: discord-events.magicalcodewit.ch
+    http: &http
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: discord-events-export
+            port:
+              number: 8000
